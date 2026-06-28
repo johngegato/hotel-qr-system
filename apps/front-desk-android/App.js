@@ -22,7 +22,7 @@ registerGlobals();
 
 // Configuration
 // Change this to your Railway deployment URL after deploying
-const SERVER_URL = 'https://your-railway-app.up.railway.app'; // TODO: Replace with your Railway URL
+const SERVER_URL = 'https://artistic-possibility-production.up.railway.app';
 
 export default function App() {
   // State
