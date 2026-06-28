@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Call Front Desk - Room 101</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      max-width: 400px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    h1 {
+      font-size: 24px;
+      margin-bottom: 10px;
+      color: #1a202c;
+    }
+    .room-info {
+      color: #718096;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+    .status {
+      text-align: center;
+      padding: 20px;
+      margin: 20px 0;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 500;
+    }
+    .status.idle { background: #e2e8f0; color: #2d3748; }
+    .status.calling { background: #fef5e7; color: #d69e2e; }
+    .status.connected { background: #c6f6d5; color: #22543d; }
+    .status.error { background: #fed7d7; color: #742a2a; }
+    .btn {
+      width: 100%;
+      padding: 16px;
+      border: none;
+      border-radius: 10px;
+      font-size: 18px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      margin: 10px 0;
+    }
+    .btn-call {
+      background: #48bb78;
+      color: white;
+    }
+    .btn-call:hover { background: #38a169; }
+    .btn-call:disabled {
+      background: #a0aec0;
+      cursor: not-allowed;
+    }
+    .btn-hangup {
+      background: #f56565;
+      color: white;
+    }
+    .btn-hangup:hover { background: #e53e3e; }
+    .timer {
+      font-size: 32px;
+      font-weight: bold;
+      text-align: center;
+      margin: 20px 0;
+      color: #2d3748;
+    }
+    .queue-info {
+      background: #ebf8ff;
+      border: 1px solid #bee3f8;
+      border-radius: 10px;
+      padding: 15px;
+      margin: 20px 0;
+      text-align: center;
+    }
+    .fallback {
+      background: #fef5e7;
+      border: 1px solid #f6e05e;
+      border-radius: 10px;
+      padding: 15px;
+      margin: 20px 0;
+      text-align: center;
+    }
+    .fallback a {
+      color: #d69e2e;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📞 Call Front Desk</h1>
+    <p class="room-info">Room 101</p>
+    
+    <div id="status" class="status idle">Ready to call</div>
+    
+    <div id="timer" class="timer hidden">00:00</div>
+    
+    <div id="queueInfo" class="queue-info hidden">
+      <p>You are <strong id="queuePosition">#1</strong> in line</p>
+      <p>Estimated wait: <strong id="waitTime">1:00</strong></p>
+    </div>
+    
+    <div id="fallback" class="fallback hidden">
+      <p>Internet call unavailable</p>
+      <a href="tel:+15551234567">📱 Call directly: +1 (555) 123-4567</a>
+    </div>
+    
+    <button id="callBtn" class="btn btn-call">Call Front Desk</button>
+    <button id="hangupBtn" class="btn btn-hangup hidden">End Call</button>
+  </div>
+  
+  <audio id="remoteAudio" autoplay></audio>
+
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <script>
+    // Configuration
+    // Change this to your Railway deployment URL after deploying
+    const SERVER_URL = 'https://your-railway-app.up.railway.app'; // TODO: Replace with your Railway URL
+    const ROOM_NUMBER = '101';
+    
+    // State
+    let socket;
+    let peerConnection;
+    let localStream;
+    let callId;
+    let callStartTime;
+    let timerInterval;
+    
+    // DOM Elements
+    const statusEl = document.getElementById('status');
+    const timerEl = document.getElementById('timer');
+    const queueInfoEl = document.getElementById('queueInfo');
+    const queuePositionEl = document.getElementById('queuePosition');
+    const waitTimeEl = document.getElementById('waitTime');
+    const fallbackEl = document.getElementById('fallback');
+    const callBtn = document.getElementById('callBtn');
+    const hangupBtn = document.getElementById('hangupBtn');
+    const remoteAudio = document.getElementById('remoteAudio');
+    
+    // Initialize Socket.io
+    function initSocket() {
+      socket = io(SERVER_URL, {
+        transports: ['websocket'],
+        reconnection: true,
+        reconnectionAttempts: 5
+      });
+      
+      socket.on('connect', () => {
+        console.log('Connected to signaling server');
+        updateStatus('idle', 'Ready to call');
+      });
+      
+      socket.on('call_initiated', (data) => {
+        callId = data.callId;
+        console.log('Call initiated:', callId);
+      });
+      
+      socket.on('call_queued', (data) => {
+        callId = data.callId;
+        updateStatus('calling', 'In queue...');
+        showQueue(data.position, data.estimatedWait);
+      });
+      
+      socket.on('queue_update', (data) => {
+        updateQueuePosition(data.position, data.estimatedWait);
+      });
+      
+      socket.on('call_answered', async (data) => {
+        console.log('Call answered');
+        hideQueue();
+        await peerConnection.setRemoteDescription(data.answer);
+        updateStatus('connected', 'Connected');
+        startTimer();
+        callBtn.classList.add('hidden');
+        hangupBtn.classList.remove('hidden');
+      });
+      
+      socket.on('ice_candidate', async (data) => {
+        if (peerConnection) {
+          await peerConnection.addIceCandidate(data.candidate);
+        }
+      });
+      
+      socket.on('call_duration_warning', (data) => {
+        console.log('Call ending in', data.secondsLeft, 'seconds');
+        // Could show warning UI here
+      });
+      
+      socket.on('call_ended', (data) => {
+        console.log('Call ended:', data.reason);
+        cleanup();
+        updateStatus('idle', 'Call ended');
+        callBtn.classList.remove('hidden');
+        hangupBtn.classList.add('hidden');
+      });
+      
+      socket.on('call_rejected', (data) => {
+        console.log('Call rejected:', data.reason);
+        updateStatus('error', data.message);
+        showFallback();
+        callBtn.disabled = true;
+      });
+      
+      socket.on('disconnect', () => {
+        console.log('Disconnected from server');
+        updateStatus('error', 'Connection lost');
+      });
+    }
+    
+    // Start call
+    async function startCall() {
+      try {
+        updateStatus('calling', 'Getting microphone...');
+        
+        // Get microphone
+        localStream = await navigator.mediaDevices.getUserMedia({ 
+          audio: true, 
+          video: false 
+        });
+        
+        // Create peer connection
+        peerConnection = new RTCPeerConnection({
+          iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+        });
+        
+        // Add local audio tracks
+        localStream.getTracks().forEach(track => {
+          peerConnection.addTrack(track, localStream);
+        });
+        
+        // Handle remote audio
+        peerConnection.ontrack = (event) => {
+          remoteAudio.srcObject = event.streams[0];
+        };
+        
+        // Handle ICE candidates
+        peerConnection.onicecandidate = (event) => {
+          if (event.candidate) {
+            socket.emit('ice_candidate', {
+              callId,
+              candidate: event.candidate
+            });
+          }
+        };
+        
+        // Create offer
+        updateStatus('calling', 'Connecting...');
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        
+        // Send offer to server
+        socket.emit('initiate_call', {
+          roomNumber: ROOM_NUMBER,
+          offer: peerConnection.localDescription
+        });
+        
+      } catch (error) {
+        console.error('Error starting call:', error);
+        updateStatus('error', 'Microphone access denied');
+        showFallback();
+      }
+    }
+    
+    // End call
+    function endCall() {
+      socket.emit('end_call', { callId, endedBy: 'guest' });
+      cleanup();
+      updateStatus('idle', 'Call ended');
+      callBtn.classList.remove('hidden');
+      hangupBtn.classList.add('hidden');
+    }
+    
+    // Cleanup
+    function cleanup() {
+      if (peerConnection) {
+        peerConnection.close();
+        peerConnection = null;
+      }
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+        localStream = null;
+      }
+      remoteAudio.srcObject = null;
+      stopTimer();
+    }
+    
+    // Timer functions
+    function startTimer() {
+      callStartTime = Date.now();
+      timerEl.classList.remove('hidden');
+      timerInterval = setInterval(updateTimer, 1000);
+    }
+    
+    function stopTimer() {
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+      timerEl.classList.add('hidden');
+    }
+    
+    function updateTimer() {
+      const elapsed = Math.floor((Date.now() - callStartTime) / 1000);
+      const minutes = Math.floor(elapsed / 60);
+      const seconds = elapsed % 60;
+      timerEl.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+    
+    // UI update functions
+    function updateStatus(type, message) {
+      statusEl.className = `status ${type}`;
+      statusEl.textContent = message;
+    }
+    
+    function showQueue(position, waitTime) {
+      queueInfoEl.classList.remove('hidden');
+      updateQueuePosition(position, waitTime);
+    }
+    
+    function updateQueuePosition(position, waitTime) {
+      queuePositionEl.textContent = `#${position}`;
+      const minutes = Math.floor(waitTime / 60);
+      const seconds = waitTime % 60;
+      waitTimeEl.textContent = `${minutes}:${String(seconds).padStart(2, '0')}`;
+    }
+    
+    function hideQueue() {
+      queueInfoEl.classList.add('hidden');
+    }
+    
+    function showFallback() {
+      fallbackEl.classList.remove('hidden');
+    }
+    
+    // Event listeners
+    callBtn.addEventListener('click', startCall);
+    hangupBtn.addEventListener('click', endCall);
+    
+    // Initialize
+    initSocket();
+  </script>
+</body>
+</html>
