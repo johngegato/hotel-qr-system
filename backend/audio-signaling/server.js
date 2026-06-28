@@ -7,6 +7,15 @@ const cors = require('cors');
 const app = express();
 app.use(cors());
 
+// Root endpoint (for Railway health check)
+app.get('/', (req, res) => {
+  res.json({ 
+    service: 'hotel-audio-signaling',
+    status: 'running',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Health check endpoint (for Railway/monitoring)
 app.get('/health', (req, res) => {
   res.json({ 
