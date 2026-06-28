@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "Hotel Front Desk",
+    "slug": "hotel-front-desk",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#1a202c"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "This app needs microphone access for audio calls with guests."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#1a202c"
+      },
+      "permissions": ["RECORD_AUDIO"],
+      "package": "com.hotel.frontdesk"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "react-native-webrtc",
+        {
+          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera",
+          "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone"
+        }
+      ]
+    ]
+  }
+}
