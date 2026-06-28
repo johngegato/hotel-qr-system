@@ -22,12 +22,13 @@ const server = http.createServer(app);
 // Configure CORS - allow all origins in development, restrict in production
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
   ? process.env.ALLOWED_ORIGINS.split(',')
-  : '*';
+  : true; // Use `true` for wildcard in Socket.io
 
 const io = new Server(server, {
   cors: {
     origin: allowedOrigins,
-    methods: ["GET", "POST"]
+    methods: ["GET", "POST"],
+    credentials: true
   },
   pingTimeout: 60000,
   pingInterval: 25000
@@ -351,10 +352,27 @@ io.on("connection", (socket) => {
 // ============================================
 
 const PORT = process.env.PORT || 5000;
+const HOST = process.env.HOST || '0.0.0.0';
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Audio Signaling Server running on port ${PORT}`);
-  console.log(`📊 Health check: http://localhost:${PORT}/health`);
+server.listen(PORT, HOST, () => {
+  console.log(`🚀 Audio Signaling Server running on ${HOST}:${PORT}`);
+  console.log(`📊 Health check: http://${HOST}:${PORT}/health`);
+  console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
+});
+
+// Handle server errors
+server.on('error', (err) => {
+  console.error('Server error:', err);
+  process.exit(1);
+});
+
+// Handle uncaught errors
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled rejection at:', promise, 'reason:', reason);
 });
 
 // Graceful shutdown
@@ -364,4 +382,9 @@ process.on('SIGTERM', () => {
     console.log('Server closed');
     process.exit(0);
   });
+  // Force close after 10 seconds
+  setTimeout(() => {
+    console.error('Could not close connections in time, forcefully shutting down');
+    process.exit(1);
+  }, 10000);
 });
