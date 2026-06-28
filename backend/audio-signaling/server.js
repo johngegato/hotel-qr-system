@@ -28,19 +28,17 @@ app.get('/health', (req, res) => {
 
 const server = http.createServer(app);
 
-// Configure CORS - allow all origins in development, restrict in production
-const allowedOrigins = process.env.ALLOWED_ORIGINS 
-  ? process.env.ALLOWED_ORIGINS.split(',')
-  : true; // Use `true` for wildcard in Socket.io
-
+// Configure CORS - allow all origins for Railway deployment
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
+    origin: "*",
     methods: ["GET", "POST"],
-    credentials: true
+    credentials: false,
+    transports: ['websocket', 'polling']
   },
   pingTimeout: 60000,
-  pingInterval: 25000
+  pingInterval: 25000,
+  serveClient: false
 });
 
 // ============================================
@@ -363,10 +361,17 @@ io.on("connection", (socket) => {
 const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
 
+// Log environment info before starting
+console.log('=== Server Configuration ===');
+console.log('PORT from env:', process.env.PORT);
+console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('ALLOWED_ORIGINS:', process.env.ALLOWED_ORIGINS);
+
 server.listen(PORT, HOST, () => {
   console.log(`🚀 Audio Signaling Server running on ${HOST}:${PORT}`);
   console.log(`📊 Health check: http://${HOST}:${PORT}/health`);
   console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`✅ Socket.IO ready for connections`);
 });
 
 // Handle server errors
