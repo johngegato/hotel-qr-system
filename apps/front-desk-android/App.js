@@ -41,9 +41,11 @@ export default function App() {
   // Initialize Socket.io
   useEffect(() => {
     const socket = io(SERVER_URL, {
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],  // Allow polling as fallback
       reconnection: true,
-      reconnectionAttempts: 10
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      timeout: 20000
     });
     
     socketRef.current = socket;
