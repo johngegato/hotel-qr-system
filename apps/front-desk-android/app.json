@@ -18,11 +18,18 @@
       "adaptiveIcon": {
         "backgroundColor": "#1a202c"
       },
-      "permissions": ["RECORD_AUDIO"],
+      "permissions": [
+        "RECORD_AUDIO"
+      ],
       "package": "com.hotel.frontdesk"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "7cd346e9-c1fb-4c75-839b-d255b4490ca4"
+      }
     }
   }
 }
