@@ -79,32 +79,40 @@ export default function App() {
   // Answer call
   const answerCall = async () => {
     try {
+      console.log('[App] Starting answer call flow...');
+      console.log('[App] Pending offer:', pendingOfferRef.current);
+      
       // Get microphone
-      const stream = await mediaDevices.getUserMedia({ 
-        audio: true, 
-        video: false 
-      });
+      console.log('[App] Requesting microphone access...');
+      let stream;
+      try {
+        stream = await mediaDevices.getUserMedia({ 
+          audio: true, 
+          video: false 
+        });
+        console.log('[App] Microphone access granted, tracks:', stream.getTracks().length);
+      } catch (streamError) {
+        console.error('[App] Microphone access denied:', streamError);
+        Alert.alert('Microphone Error', 'Microphone access is required for calls');
+        return;
+      }
+      console.log('[App] Microphone access granted, tracks:', stream.getTracks().length);
       localStreamRef.current = stream;
       
       // Create peer connection
+      console.log('[App] Creating peer connection...');
       const pc = new RTCPeerConnection({
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' }
+        ]
       });
       peerConnectionRef.current = pc;
-      
-      // Add local audio tracks
-      stream.getTracks().forEach(track => {
-        pc.addTrack(track, stream);
-      });
-      
-      // Handle remote audio
-      pc.ontrack = (event) => {
-        console.log('Received remote audio track');
-        // React Native WebRTC handles playback automatically
-      };
+      console.log('[App] Peer connection created');
       
       // Handle ICE candidates
       pc.onicecandidate = (event) => {
+        console.log('[App] ICE candidate found');
         if (event.candidate) {
           socketRef.current.emit('ice_candidate', {
             callId: currentCall.callId,
@@ -113,27 +121,50 @@ export default function App() {
         }
       };
       
+      // Handle remote audio
+      pc.ontrack = (event) => {
+        console.log('[App] Received remote audio track');
+        // React Native WebRTC handles playback automatically
+      };
+      
+      // Add local audio tracks
+      console.log('[App] Adding local audio tracks...');
+      stream.getTracks().forEach(track => {
+        console.log('[App] Adding track:', track.kind, track.id);
+        pc.addTrack(track, stream);
+      });
+      
       // Set remote description (offer from guest)
-      await pc.setRemoteDescription(
-        new RTCSessionDescription(pendingOfferRef.current)
-      );
+      console.log('[App] Setting remote description...');
+      const remoteDesc = new RTCSessionDescription(pendingOfferRef.current);
+      console.log('[App] Remote description type:', remoteDesc.type);
+      await pc.setRemoteDescription(remoteDesc);
+      console.log('[App] Remote description set successfully');
       
       // Create answer
+      console.log('[App] Creating answer...');
       const answer = await pc.createAnswer();
+      console.log('[App] Answer created');
+      
       await pc.setLocalDescription(answer);
+      console.log('[App] Local description set');
       
       // Send answer to server
+      console.log('[App] Sending answer to server...');
       socketRef.current.emit('answer_call', {
         callId: currentCall.callId,
         answer: pc.localDescription
       });
+      console.log('[App] Answer sent to server');
       
       setCallState('connected');
       startTimer();
+      console.log('[App] Call connected!');
       
     } catch (error) {
-      console.error('Error answering call:', error);
-      Alert.alert('Error', 'Failed to answer call');
+      console.error('[App] Error answering call:', error);
+      console.error('[App] Error stack:', error.stack);
+      Alert.alert('Error', `Failed to answer call: ${error.message || 'Unknown error'}`);
       setCallState('idle');
     }
   };
